@@ -108,10 +108,12 @@ def get_certbot_path():
 
 
 def renew_certs():
-	click.confirm('Running this will stop the nginx service temporarily causing your sites to go offline\n'
+	click.confirm('Running this will stop the nginx/supervisor service temporarily causing your sites to go offline\n'
 		'Do you want to continue?',
 		abort=True)
 
+	service('supervisor', 'stop')
 	service('nginx', 'stop')
 	exec_cmd("{path} renew".format(path=get_certbot_path()))
-	service('nginx', 'start')
+	service('supervisor', 'restart')
+	# service('nginx', 'start')
