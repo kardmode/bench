@@ -13,11 +13,16 @@ def start(no_dev, concurrency):
 
 @click.command('restart')
 @click.option('--web', is_flag=True, default=False)
-def restart(web):
-	"Restart supervisor processes"
-	from bench.utils import restart_supervisor_processes
-	restart_supervisor_processes(bench_path='.', web_workers=web)
-
+@click.option('--supervisor', is_flag=True, default=False)
+@click.option('--systemd', is_flag=True, default=False)
+def restart(web, supervisor, systemd):
+	"Restart supervisor processes or systemd units"
+	from bench.utils import restart_supervisor_processes, restart_systemd_processes
+	from bench.config.common_site_config import get_config
+	if get_config('.').get('restart_supervisor_on_update') or supervisor:
+		restart_supervisor_processes(bench_path='.', web_workers=web)
+	if get_config('.').get('restart_systemd_on_update') or systemd:
+		restart_systemd_processes(bench_path='.', web_workers=web)
 
 @click.command('set-nginx-port')
 @click.argument('site')
@@ -124,19 +129,23 @@ def backup_all_sites():
 @click.option('--remote', default='upstream')
 @click.option('--owner', default='frappe')
 @click.option('--repo-name')
-def release(app, bump_type, from_branch, to_branch, owner, repo_name, remote):
+@click.option('--dont-frontport', is_flag=True, default=False, help='Front port fixes to new branches, example merging hotfix(v10) into staging-fixes(v11)')
+def release(app, bump_type, from_branch, to_branch, owner, repo_name, remote, dont_frontport):
 	"Release app (internal to the Frappe team)"
 	from bench.release import release
+	frontport = not dont_frontport
 	release(bench_path='.', app=app, bump_type=bump_type, from_branch=from_branch, to_branch=to_branch,
-		remote=remote, owner=owner, repo_name=repo_name)
+		remote=remote, owner=owner, repo_name=repo_name, frontport=frontport)
 
-@click.command('prepare-staging')
+
+@click.command('prepare-beta-release')
 @click.argument('app')
-def prepare_staging(app):
-	"""Prepare staging branch from develop branch"""
-	from bench.prepare_staging import prepare_staging
-	prepare_staging(bench_path='.', app=app)
-	
+@click.option('--owner', default='frappe')
+def prepare_beta_release(app, owner):
+	"""Prepare major beta release from develop branch"""
+	from bench.prepare_beta_release import prepare_beta_release
+	prepare_beta_release(bench_path='.', app=app, owner=owner)
+
 
 @click.command('disable-production')
 def disable_production():

@@ -6,6 +6,7 @@ import bench.utils
 import bench.app
 import bench.config.common_site_config
 import bench.cli
+from bench.release import get_bumped_version
 
 bench.cli.from_command_line = True
 
@@ -19,6 +20,18 @@ class TestBenchInit(unittest.TestCase):
 			bench_path = os.path.join(self.benches_path, bench_name)
 			if os.path.exists(bench_path):
 				shutil.rmtree(bench_path, ignore_errors=True)
+
+	def test_semantic_version(self):
+		self.assertEqual( get_bumped_version('11.0.4', 'major'), '12.0.0' )
+		self.assertEqual( get_bumped_version('11.0.4', 'minor'), '11.1.0' )
+		self.assertEqual( get_bumped_version('11.0.4', 'patch'), '11.0.5' )
+		self.assertEqual( get_bumped_version('11.0.4', 'prerelease'), '11.0.5-beta.1' )
+
+		self.assertEqual( get_bumped_version('11.0.5-beta.22', 'major'), '12.0.0' )
+		self.assertEqual( get_bumped_version('11.0.5-beta.22', 'minor'), '11.1.0' )
+		self.assertEqual( get_bumped_version('11.0.5-beta.22', 'patch'), '11.0.5' )
+		self.assertEqual( get_bumped_version('11.0.5-beta.22', 'prerelease'), '11.0.5-beta.23' )
+
 
 	def test_init(self, bench_name="test-bench", **kwargs):
 		self.init_bench(bench_name, **kwargs)
@@ -65,8 +78,8 @@ class TestBenchInit(unittest.TestCase):
 	def new_site(self, site_name):
 		new_site_cmd = ["bench", "new-site", site_name, "--admin-password", "admin"]
 
-		# set in travis
-		if os.environ.get("TRAVIS"):
+		# set in CI
+		if os.environ.get('CI'):
 			new_site_cmd.extend(["--mariadb-root-password", "travis"])
 
 		subprocess.check_output(new_site_cmd, cwd=os.path.join(self.benches_path, "test-bench"))
@@ -173,7 +186,7 @@ class TestBenchInit(unittest.TestCase):
 		if archived_sites_path:
 			drop_site_cmd.extend(['--archived-sites-path', archived_sites_path])
 
-		if os.environ.get('TRAVIS'):
+		if os.environ.get('CI'):
 			drop_site_cmd.extend(['--root-password', 'travis'])
 
 		bench_path = os.path.join(self.benches_path, 'test-bench')
@@ -229,8 +242,12 @@ class TestBenchInit(unittest.TestCase):
 				self.assertTrue(search_key in f)
 
 	def assert_socketio(self, bench_name):
-		self.assert_exists(bench_name, "node_modules")
-		self.assert_exists(bench_name, "node_modules", "socket.io")
+		try: # for v10 and under
+			self.assert_exists(bench_name, "node_modules")
+			self.assert_exists(bench_name, "node_modules", "socket.io")
+		except: # for v11 and above
+			self.assert_exists(bench_name, "apps", "frappe", "node_modules")
+			self.assert_exists(bench_name, "apps", "frappe", "node_modules", "socket.io")
 
 	def assert_common_site_config(self, bench_name, expected_config):
 		common_site_config_path = os.path.join(bench_name, 'sites', 'common_site_config.json')
