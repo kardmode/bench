@@ -1,4 +1,4 @@
-# wget setup_frappe.py | python
+# wget setup_frappe.py | python3
 import os, sys, subprocess, getpass, json, multiprocessing, shutil, platform
 from distutils.spawn import find_executable
 
@@ -14,7 +14,7 @@ def install_bench(args):
 	success = run_os_command({
 		'apt-get': [
 			'sudo apt-get update',
-			'sudo apt-get install -y git build-essential python-setuptools python-dev libffi-dev libssl-dev'
+			'sudo apt-get install -y git build-essential python3-setuptools python3-dev libffi-dev'
 		],
 		'yum': [
 			'sudo yum groupinstall -y "Development tools"',
@@ -46,16 +46,22 @@ def install_bench(args):
 			})
 
 		success = run_os_command({
-			'python': 'sudo python get-pip.py --force-reinstall'
+			'python3': 'sudo python3 get-pip.py --force-reinstall'
 		})
 
 		if success:
-			run_os_command({
-				'pip': 'sudo pip install --upgrade setuptools requests cryptography pip'
-			})
+			dist_name, dist_version = get_distribution_info()
+			if dist_name == 'centos':
+				run_os_command({
+					'pip': 'sudo pip install --upgrade --ignore-installed requests'
+				})
+			else:
+				run_os_command({
+					'pip': 'sudo pip install --upgrade requests'
+				})
 
 	success = run_os_command({
-		'pip': "sudo pip install --upgrade cryptography ansible"
+		'pip': "sudo pip install --upgrade setuptools cryptography ansible==2.8.5 pip"
 	})
 
 	if not success:
@@ -79,12 +85,11 @@ def install_bench(args):
 		raise Exception('Please run this script as a non-root user with sudo privileges, but without using sudo or pass --user=USER')
 
 	# Python executable
-	if not args.production:
-		dist_name, dist_version = get_distribution_info()
-		if dist_name=='centos':
-			args.python = 'python3.6'
-		else:
-			args.python = 'python3'
+	dist_name, dist_version = get_distribution_info()
+	if dist_name=='centos':
+		args.python = 'python3.6'
+	else:
+		args.python = 'python3'
 
 	# create user if not exists
 	extra_vars = vars(args)
@@ -103,18 +108,26 @@ def install_bench(args):
 	if args.production:
 		extra_vars.update(max_worker_connections=multiprocessing.cpu_count() * 1024)
 
-	if args.frappe_branch:
-		frappe_branch = args.frappe_branch
-	else:
-		frappe_branch = 'master' if args.production else 'develop'
-	extra_vars.update(frappe_branch=frappe_branch)
+	frappe_branch = 'version-12'
+	erpnext_branch = 'version-12'
 
-	if args.erpnext_branch:
-		erpnext_branch = args.erpnext_branch
+	if args.version:
+		if args.version <= 10:
+			frappe_branch = "{0}.x.x".format(args.version)
+			erpnext_branch = "{0}.x.x".format(args.version)
+		else:
+			frappe_branch = "version-{0}".format(args.version)
+			erpnext_branch = "version-{0}".format(args.version)
 	else:
-		erpnext_branch = 'master' if args.production else 'develop'
+		if args.frappe_branch:
+			frappe_branch = args.frappe_branch
+
+		if args.erpnext_branch:
+			erpnext_branch = args.erpnext_branch
+
+	extra_vars.update(frappe_branch=frappe_branch)
 	extra_vars.update(erpnext_branch=erpnext_branch)
-	
+
 	bench_name = 'frappe-bench' if not args.bench_name else args.bench_name
 	extra_vars.update(bench_name=bench_name)
 
@@ -129,7 +142,7 @@ def install_bench(args):
 		shutil.rmtree(tmp_bench_repo)
 
 def check_distribution_compatibility():
-	supported_dists = {'ubuntu': [14, 15, 16, 18], 'debian': [8, 9],
+	supported_dists = {'ubuntu': [14, 15, 16, 18, 19], 'debian': [8, 9],
 		'centos': [7], 'macos': [10.9, 10.10, 10.11, 10.12]}
 
 	dist_name, dist_version = get_distribution_info()
@@ -150,27 +163,6 @@ def get_distribution_info():
 	elif platform.system() == "Darwin":
 		current_dist = platform.mac_ver()
 		return "macos", current_dist[0].rsplit('.', 1)[0]
-
-def install_python27():
-	version = (sys.version_info[0], sys.version_info[1])
-
-	if version == (2, 7):
-		return
-
-	print('Installing Python 2.7')
-
-	# install python 2.7
-	success = run_os_command({
-		'apt-get': 'sudo apt-get install -y python-dev',
-		'yum': 'sudo yum install -y python27',
-		'brew': 'brew install python'
-	})
-
-	if not success:
-		could_not_install('Python 2.7')
-
-	# replace current python with python2.7
-	os.execvp('python2.7', ([] if is_sudo_user() else ['sudo']) + ['python2.7', __file__] + sys.argv[1:])
 
 def install_package(package):
 	package_exec = find_executable(package)
@@ -318,13 +310,10 @@ def get_extra_vars_json(extra_args):
 	return ('@' + json_path)
 
 def run_playbook(playbook_name, sudo=False, extra_vars=None):
-	args = ['ansible-playbook', '-c', 'local',  playbook_name]
+	args = ['ansible-playbook', '-c', 'local',  playbook_name , '-vvvv']
 
 	if extra_vars:
 		args.extend(['-e', get_extra_vars_json(extra_vars)])
-
-		if extra_vars.get('verbosity'):
-			args.append('-vvvv')
 
 	if sudo:
 		user = extra_vars.get('user') or getpass.getuser()
@@ -355,7 +344,7 @@ def parse_commandline_args():
 
 	parser.add_argument('--site', dest='site', action='store', default='site1.local',
 		help='Specifiy name for your first ERPNext site')
-	
+
 	parser.add_argument('--without-site', dest='without_site', action='store_true',
 		default=False)
 
@@ -373,15 +362,19 @@ def parse_commandline_args():
 
 	parser.add_argument('--frappe-branch', dest='frappe_branch', action='store',
 		help='Clone a particular branch of frappe')
-	
+
 	parser.add_argument('--erpnext-repo-url', dest='erpnext_repo_url', action='store', default='https://github.com/frappe/erpnext',
 		help='Clone erpnext from the given url')
-	
+
 	parser.add_argument('--erpnext-branch', dest='erpnext_branch', action='store',
 		help='Clone a particular branch of erpnext')
 
 	parser.add_argument('--without-erpnext', dest='without_erpnext', action='store_true', default=False,
 		help='Prevent fetching ERPNext')
+
+	# direct provision to install versions
+	parser.add_argument('--version', dest='version', action='store', default='12', type=int,
+		help='Clone particular version of frappe and erpnext')
 
 	# To enable testing of script using Travis, this should skip the prompt
 	parser.add_argument('--run-travis', dest='run_travis', action='store_true', default=False,
@@ -389,18 +382,19 @@ def parse_commandline_args():
 
 	parser.add_argument('--without-bench-setup', dest='without_bench_setup', action='store_true', default=False,
 		help=argparse.SUPPRESS)
-	
+
 	# whether to overwrite an existing bench
 	parser.add_argument('--overwrite', dest='overwrite', action='store_true', default=False,
 		help='Whether to overwrite an existing bench')
 
 	# set passwords
 	parser.add_argument('--mysql-root-password', dest='mysql_root_password', help='Set mysql root password')
+	parser.add_argument('--mariadb-version', dest='mariadb_version', default='10.2', help='Specify mariadb version')
 	parser.add_argument('--admin-password', dest='admin_password', help='Set admin password')
 	parser.add_argument('--bench-name', dest='bench_name', help='Create bench with specified name. Default name is frappe-bench')
 
 	# Python interpreter to be used
-	parser.add_argument('--python', dest='python', default='python',
+	parser.add_argument('--python', dest='python', default='python3',
 		help=argparse.SUPPRESS
 	)
 
@@ -414,12 +408,6 @@ def parse_commandline_args():
 	return args
 
 if __name__ == '__main__':
-	try:
-		import argparse
-	except ImportError:
-		# install python2.7
-		install_python27()
-
 	args = parse_commandline_args()
 
 	install_bench(args)

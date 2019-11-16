@@ -5,10 +5,11 @@ import sys, os, copy
 @click.command('start')
 @click.option('--no-dev', is_flag=True, default=False)
 @click.option('--concurrency', '-c', type=str)
-def start(no_dev, concurrency):
+@click.option('--procfile', '-p', type=str)
+def start(no_dev, concurrency, procfile):
 	"Start Frappe development processes"
 	from bench.utils import start
-	start(no_dev=no_dev, concurrency=concurrency)
+	start(no_dev=no_dev, concurrency=concurrency, procfile=procfile)
 
 
 @click.command('restart')
@@ -66,6 +67,36 @@ def set_mariadb_host(host):
 	"Set MariaDB host for bench"
 	from bench.utils import set_mariadb_host
 	set_mariadb_host(host)
+
+@click.command('set-redis-cache-host')
+@click.argument('host')
+def set_redis_cache_host(host):
+	"""
+	Set Redis cache host for bench
+	Eg: bench set-redis-cache-host localhost:6379/1
+	"""
+	from bench.utils import set_redis_cache_host
+	set_redis_cache_host(host)
+
+@click.command('set-redis-queue-host')
+@click.argument('host')
+def set_redis_queue_host(host):
+	"""
+	Set Redis queue host for bench
+	Eg: bench set-redis-queue-host localhost:6379/2
+	"""
+	from bench.utils import set_redis_queue_host
+	set_redis_queue_host(host)
+
+@click.command('set-redis-socketio-host')
+@click.argument('host')
+def set_redis_socketio_host(host):
+	"""
+	Set Redis socketio host for bench
+	Eg: bench set-redis-socketio-host localhost:6379/3
+	"""
+	from bench.utils import set_redis_socketio_host
+	set_redis_socketio_host(host)
 
 
 @click.command('set-default-site')

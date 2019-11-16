@@ -1,3 +1,4 @@
+from __future__ import print_function
 import os
 from .utils import (exec_cmd, get_frappe, check_git_for_shallow_clone, build_assets,
 	restart_supervisor_processes, get_cmd_output, run_frappe_cmd, CommandFailedError,
@@ -135,17 +136,9 @@ def get_app(git_url, branch=None, bench_path='.', build_asset_files=True, verbos
 	install_app(app=app_name, bench_path=bench_path, verbose=verbose)
 
 	if postprocess:
-		# get apps for docs
-		if repo_name=='frappe':
-			get_app('https://github.com/frappe/frappe_io', bench_path = bench_path,
-				branch= 'master', postprocess = False)
-
-		if repo_name=='erpnext':
-			get_app('https://github.com/erpnext/foundation', bench_path = bench_path,
-				branch= 'master', postprocess = False)
 
 		if build_asset_files:
-			build_assets(bench_path=bench_path)
+			build_assets(bench_path=bench_path, app=app_name)
 		conf = get_config(bench_path=bench_path)
 
 		if conf.get('restart_supervisor_on_update'):
@@ -191,7 +184,7 @@ def remove_app(app, bench_path='.'):
 	for site in os.listdir(site_path):
 		req_file = os.path.join(site_path, site, 'site_config.json')
 		if os.path.exists(req_file):
-			out = subprocess.check_output(["bench", "--site", site, "list-apps"], cwd=bench_path)
+			out = subprocess.check_output(["bench", "--site", site, "list-apps"], cwd=bench_path).decode('utf-8')
 			if re.search(r'\b' + app + r'\b', out):
 				print("Cannot remove, app is installed on site: {0}".format(site))
 				sys.exit(1)
@@ -387,12 +380,14 @@ def switch_branch(branch, apps=None, bench_path='.', upgrade=False, check_upgrad
 		print("Successfully switched branches for:\n" + "\n".join(switched_apps))
 
 	if version_upgrade[0] and upgrade:
-		if sys.version_info >= (3, 4):
-			from importlib import reload
 		update_requirements()
 		update_node_packages()
 		pre_upgrade(version_upgrade[1], version_upgrade[2])
-		reload(utils)
+		if sys.version_info >= (3, 4):
+			import importlib
+			importlib.reload(utils)
+		else:
+			reload(utils)
 		backup_all_sites()
 		patch_sites()
 		build_assets()
@@ -424,6 +419,16 @@ def get_apps_json(path):
 	if path.startswith('http'):
 		r = requests.get(path)
 		return r.json()
-	else:
-		with open(path) as f:
-			return json.load(f)
+
+	with open(path) as f:
+		return json.load(f)
+
+def validate_branch():
+	for app in ['frappe', 'erpnext']:
+		branch = get_current_branch(app)
+
+		if branch == "master":
+			print(''' master branch is renamed to version-11 and develop to version-12. Please switch to new branches to get future updates.
+
+To switch to version 11, run the following commands: bench switch-to-branch version-11''')
+			sys.exit(1)
