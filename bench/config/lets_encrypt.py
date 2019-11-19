@@ -174,4 +174,3 @@ def setup_wildcard_ssl(domain, email, bench_path, exclude_base_domain):
 	print("Restrting Nginx service")
 	service('nginx', 'restart')
 	
->>>>>>> 97b2891a953b0063e7d372d48fc42eae9948beaa
